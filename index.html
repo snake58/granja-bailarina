@@ -155,7 +155,7 @@ if(dx*dx+dy*dy<rr*rr){poke(p);return;}}
 butterflies.push({x:px,y:py,t:0});tone(880,.12,'sine',.12);});
 
 /* mariposas decorativas */
-const butterflies=[];
+let butterflies=[];
 /* confeti */
 const confetti=[];
 function burst(x,y,n){for(let i=0;i<(n||24);i++)confetti.push({x,y,vx:(Math.random()-.5)*7,vy:-Math.random()*7-2,g:.28,
