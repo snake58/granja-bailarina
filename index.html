@@ -449,6 +449,8 @@ if(id==='muu'){ // VAQUITA con cuerpo de vaca
 function cuteEyesAt(x,y,s){ctx.fillStyle='#2B2B2B';
 ctx.beginPath();ctx.arc(x,y,s,0,7);ctx.fill();
 ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x+s*.3,y-s*.3,s*.38,0,7);ctx.fill();}
+function cheeks(x,y,s){ctx.fillStyle='rgba(255,120,150,.5)';
+ctx.beginPath();ctx.arc(x,y,s,0,7);ctx.fill();}
 function smileM(y,w){ctx.strokeStyle='#5D4037';ctx.lineWidth=3;ctx.lineCap='round';
 ctx.beginPath();ctx.arc(0,y,w,.25,Math.PI-.25);ctx.stroke();}
 
