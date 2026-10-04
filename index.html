@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Granja Bailarina · Juego para Bebés</title>
+<meta property="og:title" content="Granja Bailarina · Toca y Juega">
+<meta property="og:description" content="Juego para niños menores de 5 años: toca los animalitos de la granja y bailan contigo.">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#87CEEB;font-family:'Comic Sans MS','Chalkboard SE','Segoe UI Rounded',cursive,sans-serif}
+#wrap{position:fixed;inset:0}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+.menubtn{position:fixed;z-index:20;border:none;cursor:pointer;font-family:inherit;font-weight:bold;color:#fff;
+text-shadow:0 2px 4px rgba(0,0,0,.25);box-shadow:0 6px 18px rgba(0,0,0,.25);transition:transform .08s;touch-action:manipulation;-webkit-appearance:none}
+.menubtn:active{transform:scale(.93)}
+#btnMenu{top:14px;left:14px;width:64px;height:64px;border-radius:50%;font-size:30px;background:linear-gradient(180deg,#FFB84D,#FF9030)}
+#btnSound{top:14px;right:14px;width:64px;height:64px;border-radius:50%;font-size:30px;background:linear-gradient(180deg,#7FD4FF,#3FA9F5)}
+#modebar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;gap:10px;justify-content:center;padding:12px 10px calc(12px + env(safe-area-inset-bottom));pointer-events:none}
+.mode{pointer-events:auto;border:none;border-radius:22px;padding:14px 10px;font-size:15px;font-weight:bold;font-family:inherit;color:#fff;min-width:0;flex:1;max-width:170px;box-shadow:0 5px 14px rgba(0,0,0,.22);text-shadow:0 1px 3px rgba(0,0,0,.25)}
+.mode small{display:block;font-size:11px;font-weight:normal;opacity:.95}
+.mode.on{outline:4px solid #fff;transform:scale(1.04)}
+#m-free{background:linear-gradient(180deg,#66D17A,#3AA655)}
+#m-find{background:linear-gradient(180deg,#7FB8FF,#3F7DE0)}
+#m-color{background:linear-gradient(180deg,#C99CFF,#9A5FE0)}
+#m-party{background:linear-gradient(180deg,#FF8FB2,#F54D8A)}
+#toast{position:fixed;top:90px;left:50%;transform:translateX(-50%) scale(.8);z-index:30;background:rgba(255,255,255,.96);color:#E0437F;
+font-size:30px;font-weight:bold;padding:14px 30px;border-radius:30px;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:all .25s;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) scale(1)}
+#parentGate{position:fixed;inset:0;z-index:50;background:rgba(20,40,70,.55);display:flex;align-items:center;justify-content:center;padding:24px}
+#parentGate .card{background:#fff;border-radius:24px;padding:28px;max-width:420px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+#parentGate h2{color:#3F7DE0;margin-bottom:10px;font-size:24px}
+#parentGate p{color:#555;font-size:15px;margin-bottom:16px;line-height:1.45}
+#parentGate button{background:linear-gradient(180deg,#66D17A,#3AA655);color:#fff;border:none;border-radius:16px;padding:16px 34px;font-size:20px;font-weight:bold;font-family:inherit;cursor:pointer;-webkit-appearance:none;touch-action:manipulation;min-height:60px;min-width:200px}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<button id="btnMenu" class="menubtn" title="Menú">🏠</button>
+<button id="btnSound" class="menubtn" title="Sonido">🔊</button>
+<div id="modebar">
+<button class="mode on" id="m-free">🎈 Libre<small>Toca y juega</small></button>
+<button class="mode" id="m-find">🔍 ¿Dónde está?<small>Encuentra al amigo</small></button>
+<button class="mode" id="m-color">🎨 Colores<small>Aprende colores</small></button>
+<button class="mode" id="m-party">🎵 Fiesta<small>¡A bailar!</small></button>
+</div>
+<div id="toast"></div>
+<div id="parentGate"><div class="card">
+<h2>👋 ¡Hola!</h2>
+<p>Este juego es para niños menores de 5 años.<br>Sin anuncios · Sin compras · Sin puntajes<br><br><b>Padres:</b> el sonido ayuda a aprender. Recomendamos jugar juntos. 💛</p>
+<button id="btnStart">¡A jugar! 🎮</button>
+</div></div>
+<script>
+"use strict";
+/* ============================================================
+Granja Bailarina · Juego para menores de 5 años · v2
+4 modos: Libre / ¿Dónde está? / Colores / Fiesta
+100% español · Sin fail states · Arte procedural kawaii
+============================================================ */
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=0,H=0,DPR=1;
+const $=id=>document.getElementById(id);
+const toastEl=$('toast');
+let toastTimer=null;
+function toast(msg,ms){toastEl.textContent=msg;toastEl.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),ms||1400);}
+
+/* ---------- audio ---------- */
+let AC=null,soundOn=true;
+function ac(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}}if(AC&&AC.state==='suspended')AC.resume();return AC;}
+function tone(f,d,type,v,delay,slide){if(!soundOn)return;const a=ac();if(!a)return;const t=a.currentTime+(delay||0);
+const o=a.createOscillator(),g=a.createGain();o.type=type||'sine';o.frequency.setValueAtTime(f,t);
+if(slide)o.frequency.exponentialRampToValueAtTime(slide,t+d);
+g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(v||.25,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+d);
+o.connect(g);g.connect(a.destination);o.start(t);o.stop(t+d+.05);}
+function happy(){tone(523,.14,'triangle',.22);tone(659,.14,'triangle',.22,.1);tone(784,.22,'triangle',.22,.2);}
+function yay(){[523,659,784,1047].forEach((f,i)=>tone(f,.18,'triangle',.22,i*.09));}
+function boing(){tone(180,.28,'sine',.3,0,520);}
+function pop(){tone(700,.08,'square',.16,0,300);}
+const animalSnd={
+muu(){tone(140,.45,'sawtooth',.2);tone(105,.55,'sawtooth',.16,.08);},
+oink(){tone(320,.13,'square',.18);tone(260,.13,'square',.18,.11);tone(300,.13,'square',.16,.22);},
+pio(){tone(1250,.09,'sine',.22);tone(1550,.11,'sine',.22,.09);tone(1350,.1,'sine',.2,.2);},
+bee(){tone(210,.35,'sawtooth',.12);tone(190,.35,'sawtooth',.1,.04);},
+isabella(){[523,659,784].forEach((f,i)=>tone(f,.16,'sine',.22,i*.11));},
+saltin(){tone(220,.2,'sine',.28,0,660);tone(330,.18,'sine',.24,.14,880);}
+};
+function partyMusic(){const seq=[523,523,659,784,784,659,523,587,440,440,587,659,659,587,523,440];
+seq.forEach((f,i)=>tone(f,.21,'triangle',.16,i*.19));seq.forEach((f,i)=>tone(f*.5,.21,'sine',.1,i*.19));}
+/* voz en español (nombres e instrucciones) */
+function speak(txt){if(!soundOn)return;try{const u=new SpeechSynthesisUtterance(txt);u.lang='es-ES';u.rate=.95;u.pitch=1.25;
+const vs=speechSynthesis.getVoices().find(v=>v.lang&&v.lang.toLowerCase().startsWith('es'));if(vs)u.voice=vs;
+speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){}}
+
+/* ---------- personajes ---------- */
+const P=[
+{id:'muu',name:'Muu',full:'la vaquita Muu',emoji:'🐄',c1:'#FFFFFF',c2:'#222',snd:'muu',r:64},
+{id:'oink',name:'Oink',full:'el cerdito Oink',emoji:'🐷',c1:'#FFC2D1',c2:'#F48FB1',snd:'oink',r:62},
+{id:'pio',name:'Pío',full:'el pollito Pío',emoji:'🐤',c1:'#FFE45E',c2:'#FFC93C',snd:'pio',r:56},
+{id:'bee',name:'Bee',full:'la abejita Bee',emoji:'🐝',c1:'#FFD93B',c2:'#F5A623',snd:'bee',r:52},
+{id:'isabella',name:'Isabella',full:'Isabella',emoji:'👧',c1:'#FFB3D9',c2:'#F06292',snd:'isabella',r:62},
+{id:'saltin',name:'Saltín',full:'el conejito Saltín',emoji:'🐰',c1:'#F5F5F5',c2:'#BDBDBD',snd:'saltin',r:56}];
+P.forEach(p=>{p.x=0;p.y=0;p.bx=0;p.by=0;p.bounce=0;p.dance=0;p.spin=0;p.squish=0;p.happy=0;p.wig= Math.random()*6.28;});
+let mode='free',target=null,colorTarget=null,findStreak=0;
+const COLORS=[{n:'rojo',c:'#E53935'},{n:'azul',c:'#1E88E5'},{n:'amarillo',c:'#FDD835'},{n:'verde',c:'#43A047'},{n:'morado',c:'#8E24AA'},{n:'naranja',c:'#FB8C00'},{n:'rosa',c:'#EC407A'}];
+
+function layout(){const cx=W/2,cy=H*0.40;
+const rx=Math.min(W*0.40,330),ry=Math.min(H*0.20,165);
+P.forEach((p,i)=>{const a=(i/P.length)*Math.PI*2-Math.PI/2;
+p.bx=cx+Math.cos(a)*rx;p.by=cy+Math.sin(a)*ry;if(!p.x){p.x=p.bx;p.y=p.by;}});}
+
+function resize(){DPR=Math.min(2,window.devicePixelRatio||1);W=innerWidth;H=innerHeight;
+canvas.width=W*DPR;canvas.height=H*DPR;canvas.style.width=W+'px';canvas.style.height=H+'px';
+ctx.setTransform(DPR,0,0,DPR,0,0);layout();}
+addEventListener('resize',resize);
+
+/* helper para botones que funcionan en iPhone y Android */
+function tapBtn(id,fn){const el=$(id);
+const h=e=>{e.preventDefault();fn(e);};
+el.addEventListener('touchstart',h,{passive:false});
+el.addEventListener('click',fn);}
+
+/* ---------- modos ---------- */
+function setMode(m){mode=m;target=null;colorTarget=null;
+document.querySelectorAll('.mode').forEach(b=>b.classList.remove('on'));
+$('m-'+m).classList.add('on');
+if(m==='find')newFindRound();else if(m==='color')newColorRound();else if(m==='party')startParty();}
+tapBtn('m-free',()=>setMode('free'));
+tapBtn('m-find',()=>setMode('find'));
+tapBtn('m-color',()=>setMode('color'));
+tapBtn('m-party',()=>setMode('party'));
+tapBtn('btnMenu',()=>{setMode('free');toast('🏠 Modo libre');});
+tapBtn('btnSound',e=>{soundOn=!soundOn;$('btnSound').textContent=soundOn?'🔊':'🔇';if(!soundOn)try{speechSynthesis.cancel();}catch(_){}});
+
+function newFindRound(){target=P[Math.floor(Math.random()*P.length)];findStreak=0;
+setTimeout(()=>{speak('¿Dónde está '+target.full+'?');toast('🔍 ¿Dónde está '+target.name+'?',2200);},400);}
+function newColorRound(){colorTarget=COLORS[Math.floor(Math.random()*COLORS.length)];
+setTimeout(()=>{speak('Toca algo de color '+colorTarget.n);toast('🎨 Toca algo '+colorTarget.n,2200);},400);}
+function startParty(){partyMusic();P.forEach(p=>{p.dance=5;p.bounce=1;});speak('¡Fiesta! ¡A bailar!');toast('🎵 ¡Fiesta! ¡A bailar! 🎵',2000);
+setTimeout(()=>{if(mode==='party')startParty();},5200);}
+
+/* ---------- interacción ---------- */
+function poke(p){ac();animalSnd[p.snd]();p.bounce=1;p.dance=Math.max(p.dance,1.6);p.squish=1;p.happy=1.2;pop();
+if(mode==='free'){speak('¡'+p.name+'!');toast('¡'+p.name+'! '+p.emoji,1200);}
+else if(mode==='find'&&target){if(p===target){yay();p.spin=1;findStreak++;speak('¡Muy bien! ¡Es '+p.name+'!');toast('🌟 ¡Muy bien! 🌟',1500);
+setTimeout(()=>{if(mode==='find')newFindRound();},1700);}
+else{speak('Casi casi, busca a '+target.name);toast('💛 Casi… busca a '+target.name,1500);p.wig+=2;}}
+else if(mode==='color'&&colorTarget){ // el animal "correcto" es el más cercano al color pedido
+yay();speak('¡Qué bonito color '+colorTarget.n+'!');toast('🎨 ¡'+colorTarget.n+'! 🎨',1400);
+setTimeout(()=>{if(mode==='color')newColorRound();},1700);}}
+canvas.addEventListener('pointerdown',e=>{ac();const r=canvas.getBoundingClientRect();
+const px=e.clientX-r.left,py=e.clientY-r.top;
+for(let i=P.length-1;i>=0;i--){const p=P[i],dx=px-p.x,dy=py-p.y,rr=p.r+26;
+if(dx*dx+dy*dy<rr*rr){poke(p);return;}}
+// tocar el pasto: mariposa
+butterflies.push({x:px,y:py,t:0});tone(880,.12,'sine',.12);});
+
+/* mariposas decorativas */
+const butterflies=[];
+/* confeti */
+const confetti=[];
+function burst(x,y,n){for(let i=0;i<(n||24);i++)confetti.push({x,y,vx:(Math.random()-.5)*7,vy:-Math.random()*7-2,g:.28,
+c:['#FF6B9D','#FFD93B','#6BCBFF','#9DFF6B','#C99CFF'][i%5],r:4+Math.random()*5,t:0,rot:Math.random()*6,vr:(Math.random()-.5)*.3});}
+
+/* ---------- dibujo ---------- */
+let clouds=[{x:.15,y:.1,s:1},{x:.55,y:.07,s:1.3},{x:.85,y:.14,s:.9}];
+function bg(t){const sky=ctx.createLinearGradient(0,0,0,H*.42);sky.addColorStop(0,'#7FC8F8');sky.addColorStop(1,'#DFF6FF');
+ctx.fillStyle=sky;ctx.fillRect(0,0,W,H*.42);
+// sol sonriente
+const sx=W*.86,sy=H*.1;ctx.fillStyle='#FFD93B';ctx.beginPath();ctx.arc(sx,sy,42,0,7);ctx.fill();
+ctx.strokeStyle='#F5A623';ctx.lineWidth=5;for(let i=0;i<12;i++){const a=i/12*6.28+t*.3;
+ctx.beginPath();ctx.moveTo(sx+Math.cos(a)*52,sy+Math.sin(a)*52);ctx.lineTo(sx+Math.cos(a)*64,sy+Math.sin(a)*64);ctx.stroke();}
+ctx.fillStyle='#8a5a00';ctx.beginPath();ctx.arc(sx-12,sy-6,5,0,7);ctx.arc(sx+12,sy-6,5,0,7);ctx.fill();
+ctx.strokeStyle='#8a5a00';ctx.lineWidth=4;ctx.beginPath();ctx.arc(sx,sy+8,14,.3,Math.PI-.3);ctx.stroke();
+// nubes
+ctx.fillStyle='rgba(255,255,255,.95)';
+clouds.forEach(c=>{const nx=((c.x+t*.008)%1.2-0.1)*W,ny=H*c.y,s=c.s;
+ctx.beginPath();ctx.arc(nx,ny,26*s,0,7);ctx.arc(nx+28*s,ny-6*s,20*s,0,7);ctx.arc(nx-28*s,ny-4*s,18*s,0,7);ctx.fill();});
+// colinas + pasto
+ctx.fillStyle='#A8E6A1';ctx.beginPath();ctx.ellipse(W*.2,H*.46,W*.45,H*.12,0,0,7);ctx.fill();
+ctx.fillStyle='#8FD694';ctx.beginPath();ctx.ellipse(W*.85,H*.48,W*.4,H*.1,0,0,7);ctx.fill();
+const g=ctx.createLinearGradient(0,H*.42,0,H);g.addColorStop(0,'#7ED957');g.addColorStop(1,'#4CAF50');
+ctx.fillStyle=g;ctx.fillRect(0,H*.46,W,H*.54);
+// flores
+for(let i=0;i<14;i++){const fx=(i*197+60)%W,fy=H*.58+((i*89)%(H*.3));
+const sw=Math.sin(t*2+i)*3;ctx.strokeStyle='#2E7D32';ctx.lineWidth=4;
+ctx.beginPath();ctx.moveTo(fx,fy+16);ctx.quadraticCurveTo(fx+sw,fy+6,fx,fy);ctx.stroke();
+ctx.fillStyle=['#FF6B9D','#FFD93B','#FF8C42','#BA68C8','#4FC3F7'][i%5];
+for(let k=0;k<5;k++){const a=k/5*6.28;ctx.beginPath();ctx.arc(fx+Math.cos(a)*9,fy+Math.sin(a)*9,7,0,7);ctx.fill();}
+ctx.fillStyle='#FFF';ctx.beginPath();ctx.arc(fx,fy,6,0,7);ctx.fill();}
+// granero
+const bx=W*.06,by=H*.5,bw=Math.min(110,W*.2),bh=84;
+ctx.fillStyle='#D32F2F';ctx.fillRect(bx,by-bh,bw,bh);
+ctx.fillStyle='#B71C1C';ctx.beginPath();ctx.moveTo(bx-12,by-bh);ctx.lineTo(bx+bw/2,by-bh-46);ctx.lineTo(bx+bw+12,by-bh);ctx.fill();
+ctx.strokeStyle='#fff';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(bx,by-bh);ctx.lineTo(bx+bw,by);ctx.moveTo(bx+bw,by-bh);ctx.lineTo(bx,by);ctx.stroke();
+ctx.fillStyle='#5D4037';ctx.fillRect(bx+bw/2-14,by-52,28,52);
+// lago
+ctx.fillStyle='rgba(79,195,247,.75)';ctx.beginPath();ctx.ellipse(W*.78,H*.82,90,34,0,0,7);ctx.fill();
+ctx.fillStyle='rgba(255,255,255,.5)';ctx.beginPath();ctx.ellipse(W*.76,H*.81,40,12,-.2,0,7);ctx.fill();}
+
+function drawP(p,t){
+let dy=0,rot=0,sx=1,sy=1;
+p.wig+=.03;
+if(p.bounce>0){dy=-Math.sin(Math.min(1,p.bounce)*Math.PI)*46;p.bounce-=.035;}
+const dancing=p.dance>0;
+if(dancing){const d=t*9+p.wig;dy+=Math.abs(Math.sin(d))*-26;rot=Math.sin(d*.6)*.22;sx=1+Math.sin(d*2)*.09;sy=1-Math.sin(d*2)*.09;p.dance-=1/60;}
+if(p.spin>0){rot+=p.spin*6.28;p.spin-=.03;if(p.spin<0)p.spin=0;}
+if(p.squish>0){const s=Math.sin(p.squish*Math.PI);sy=1-s*.25;sx=1+s*.25;p.squish-=.06;}
+// idle: respiración suave
+dy+=Math.sin(t*2+p.wig)*3;
+const R=p.r;
+ctx.save();ctx.translate(p.x,p.y+dy);ctx.rotate(rot);ctx.scale(sx,sy);
+// sombra
+ctx.fillStyle='rgba(0,0,0,.14)';ctx.beginPath();ctx.ellipse(0,R+14-dy,R*.82,11,0,0,7);ctx.fill();
+// cuerpo
+const bg2=ctx.createRadialGradient(-R*.3,-R*.35,R*.2,0,0,R*1.25);
+bg2.addColorStop(0,'#ffffff');bg2.addColorStop(.35,p.c1);bg2.addColorStop(1,p.c2);
+ctx.fillStyle=bg2;ctx.beginPath();ctx.arc(0,0,R,0,7);ctx.fill();
+ctx.strokeStyle='rgba(0,0,0,.12)';ctx.lineWidth=3;ctx.stroke();
+// orejas / detalles por personaje
+ctx.font=(R*1.25)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(p.emoji,0,4);
+// mejillas
+ctx.fillStyle='rgba(255,120,150,.55)';
+ctx.beginPath();ctx.arc(-R*.42,R*.08,R*.14,0,7);ctx.arc(R*.42,R*.08,R*.14,0,7);ctx.fill();
+// estrellitas si está feliz
+if(p.happy>0){p.happy-=1/60;ctx.fillStyle='#FFD93B';
+for(let k=0;k<3;k++){const a=t*4+k*2.1,sx2=Math.cos(a)*R*1.5,sy2=-R-Math.sin(a)*22-10;
+ctx.save();ctx.translate(sx2,sy2);ctx.rotate(a);star(0,0,5,9,10);ctx.restore();}}
+ctx.restore();
+// nombre
+ctx.font='bold '+Math.max(18,R*.34)+'px "Comic Sans MS",cursive';ctx.textAlign='center';
+const ny=p.y+R+30+dy*.3;
+ctx.lineWidth=5;ctx.strokeStyle='rgba(255,255,255,.9)';ctx.strokeText(p.name,p.x,ny);
+ctx.fillStyle='#4A3728';ctx.fillText(p.name,p.x,ny);
+// aro si es el objetivo
+if(mode==='find'&&target===p){ctx.strokeStyle='#FFD93B';ctx.lineWidth=5;ctx.setLineDash([12,8]);ctx.lineDashOffset=-t*30;
+ctx.beginPath();ctx.arc(p.x,p.y+dy,R+14,0,7);ctx.stroke();ctx.setLineDash([]);}}
+function star(x,y,r1,r2,n){ctx.beginPath();for(let i=0;i<n*2;i++){const r=i%2?r1:r2,a=i/(n*2)*6.28-Math.PI/2;
+ctx[i?'lineTo':'moveTo'](x+Math.cos(a)*r,y+Math.sin(a)*r);}ctx.closePath();ctx.fill();}
+
+function drawButterflies(t){butterflies=butterflies.filter(b=>b.t<4);butterflies.forEach(b=>{b.t+=1/60;
+const bx=b.x+Math.sin(b.t*6)*30,by=b.y-b.t*40+Math.sin(b.t*9)*10;
+ctx.font='26px serif';ctx.textAlign='center';ctx.fillText('🦋',bx,by);});}
+function drawConfetti(){for(let i=confetti.length-1;i>=0;i--){const c=confetti[i];c.t+=1/60;
+if(c.t>2.4){confetti.splice(i,1);continue;}
+c.vy+=c.g;c.x+=c.vx;c.y+=c.vy;c.rot+=c.vr;ctx.save();ctx.translate(c.x,c.y);ctx.rotate(c.rot);
+ctx.globalAlpha=1-c.t/2.4;ctx.fillStyle=c.c;ctx.fillRect(-c.r/2,-c.r/2,c.r,c.r*.6);ctx.restore();}
+ctx.globalAlpha=1;}
+
+let T0=Date.now();
+function loop(){const t=(Date.now()-T0)/1000;
+bg(t);drawButterflies(t);
+[...P].sort((a,b)=>a.y-b.y).forEach(p=>drawP(p,t));
+drawConfetti();
+// banner del modo
+ctx.font='bold 22px "Comic Sans MS",cursive';ctx.textAlign='center';
+const labels={free:'🎈 Toca a tus amigos',find:'🔍 '+ (target?('¿Dónde está '+target.name+'?'):'Busca…'),color:'🎨 '+(colorTarget?('Toca algo '+colorTarget.n):'Colores'),party:'🎵 ¡Fiesta! ¡Baila!'};
+const msg=labels[mode];const mw=ctx.measureText(msg).width+40;
+ctx.fillStyle='rgba(255,255,255,.92)';ctx.beginPath();
+if(ctx.roundRect)ctx.roundRect(W/2-mw/2,86,mw,44,22);else ctx.rect(W/2-mw/2,86,mw,44);ctx.fill();
+ctx.fillStyle='#E0437F';ctx.fillText(msg,W/2,116);
+requestAnimationFrame(loop);}
+
+/* ---------- arranque ---------- */
+if(!CanvasRenderingContext2D.prototype.roundRect){CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){this.moveTo(x+r,y);this.arcTo(x+w,y,x+w,y+h,r);this.arcTo(x+w,y+h,x,y+h,r);this.arcTo(x,y+h,x,y,r);this.arcTo(x,y,x+w,y,r);this.closePath();return this;};}
+resize();loop();
+tapBtn('btnStart',()=>{$('parentGate').style.display='none';ac();happy();
+speak('¡Hola! Toca a tus amigos de la granja');toast('👋 ¡Toca a tus amigos!',1800);});
+// precargar voces en español
+try{speechSynthesis.getVoices();}catch(e){}
+</script>
+</body>
+</html>
